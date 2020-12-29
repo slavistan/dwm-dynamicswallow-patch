@@ -9,7 +9,15 @@ included to facilitate scripting.
 
 ## 1. Introduction & Usage
 
-// TODO: Basic idea and nomenclature
+As an introduction to window swallowing and an overview of the patch's capabilities watch this screen cast:
+
+<p align="center">
+	<a href="https://www.youtube.com/watch?v=iB4aBY0H_oI">
+		<img border="0" alt="W3Schools" src="sausage-girl-dwm.png" width="200" height="200">
+	</a>
+	<br>
+	<a href="https://www.youtube.com/watch?v=iB4aBY0H_oI">https://www.youtube.com/watch?v=iB4aBY0H_oI</a>
+</p>
 
 ### 1.1 Queing Swallowing of Future Windows
 
@@ -57,46 +65,14 @@ latter onto the former.
 Afterwards, the terminal can be remapped at any time by stopping the swallow using
 the hotkey *mod+u*, which is not shown in the gif.
 
-### 1.3 Stopping Swallows, Destruction of Swallowers
-
-TODO
-
 ## 2. Patching Instructions
 
 This patch is a diff against dwm's latest commit at the time of this writing
 (61bb8b2) and is meant to be self-contained. Unless you're using unmodified dwm
 the adaptions to the patch listed below may be necessary or appropriate to
-better fit in with your existing build. Additionally, some aspects of the patch
-are listed which may be considered non-essential by some.
+better fit in with your existing build.
 
-### 2.1 Inter Process Communication
-
-In order for `dwmswallow` to communicate with dwm some means of inter-process
-communication is required which dwm does not provide by default. To this end,
-this patch includes an adaption of the
-[fakesignal](https://dwm.suckless.org/patches/fsignal/) patch which allows
-sending commands to dwm by concatenating the command and its parameters into a
-string using a specific format and setting the name of the root window to this
-string.
-
-The fakesignal patch is lightweight, non-intrusive, easy to use and easy to
-extend to other commands. If your build does not include any IPC mechanisms
-there's no reason to not use fakesignal as a starting point. Its only downside
-is that the communication is unidirectional: one may send commands to dwm but
-dwm cannot send a reply in return.
-
-If your build of dwm does contain an IPC mechanism you may, of course, use the
-existing communication pathways. While there's nothing wrong with using
-fakesignal to try out the patch you will eventually want to seemlessly
-integrate everything into your existing build. To recreate the functionality of
-the vanilla version of this patch you'll have to
-
-1. relay the execution of `dwmswallow SWALLOWER SWALLOWEE` to a call to `swal()`
-2. relay the execution of `dwmswallow -c CLASS -i INSTANCE -t TITLE` to a call to `swaladdpool()`.
-
-using your IPC mechanism of choice.
-
-### 2.2 Patch-Specific Geometry Parameters
+### 2.1 Patch-Specific Geometry Parameters
 
 When swallowing a window the swallowee copies the swallower's geometry
 parameters to reposition itself to where the swallower used to be, creating the
@@ -130,23 +106,50 @@ accommodate this parameter are:
     swer->cfact = 1.0;
     ```
 
-The specific place of where to configure the parameters is marked with a
-comment included in the patch.
+The specific places of where to configure the parameters are marked with
+comments included in the patch.
 
-### 2.3 Non-Essential Functionality
+### 2.2 Inter-Process Communication
 
-A few aspects of the patch are optional and may be omitted without altering the
-core mechanisms of window swallowing. All of the optional features are enabled
-by default.
+In order for `dwmswallow` to communicate with dwm some means of inter-process
+communication is required which dwm does not provide by default. To this end,
+this patch includes an adaption of the
+[fakesignal](https://dwm.suckless.org/patches/fsignal/) patch which allows
+sending commands to dwm by concatenating the command and its parameters into a
+string using a specific format and setting the name of the root window to this
+string.
 
-#### 2.3.1 Swallow Indicator in Status Bar
+The fakesignal patch is lightweight, non-intrusive, easy to use and easy to
+extend to other commands. If your build does not include any IPC mechanisms
+there's no reason to not use fakesignal as a starting point. Its only downside
+is that the communication is unidirectional: one may send commands to dwm but
+dwm cannot send a reply in return.
+
+If your build of dwm does contain an IPC mechanism you may, of course, use the
+existing communication pathways. While there's nothing wrong with using
+fakesignal to try out the patch you will eventually want to seemlessly
+integrate everything into your existing build. To recreate the functionality of
+the vanilla version of this patch you'll have to
+
+1. relay the execution of `dwmswallow SWALLOWER SWALLOWEE` to a call to `swal()`
+2. relay the execution of `dwmswallow -c CLASS -i INSTANCE -t TITLE` to a call to `swaladdpool()`.
+
+using your IPC mechanism of choice.
+
+## 3. Assorted Notes and Implementation Details
+
+Here's a collection of notes which may act as an aid to understanding the
+internals of the patch. Consult if you're interested in manipulating the
+patches default behavior.
+
+### 3.1 Swallow Indicator in Status Bar
 
 If the currently selected window on a monitor is being swallowed a
 tongue-symbol 👅 (U+1F445) is drawn on the status bar next to the layout
 symbol. If this is undesired remove the relevant commented section from
-`drawbar()`.
+`drawbar()` or change the symbol in your *config.h*.
 
-#### 2.3.2 Retroactive Swallowing
+### 3.2 Retroactive Swallowing
 
 When queueing swallowing of a future window involving the window's title as a
 filter the swallowing may fail for some applications if retroactive swallowing
@@ -154,7 +157,7 @@ is disabled (set by `swalretroactive`). This is due to the fact these
 applications create their window using a default window title and only update
 it later to the proper, usage-specific value. When dwm checks whether any
 queued swallows match the window's title it finds that none do due to the usage
-of a default window title when the window is mapped.
+of the default window title when the window is mapped.
 
 If retroactive swallowing is enabled anytime a window changes its title dwm
 checks whether any queued swallow matches the window and executes it
@@ -174,7 +177,7 @@ dwmswallow $WINDOWID -c Zathura -t ~/books/xlib.pdf
 zathura ~/books/xlib.pdf
 ```
 
-#### 2.3.3 Decaying of Queued Swallows
+### 3.3 Decaying of Queued Swallows
 
 It occasionally happens that swallows are queued but not consumed, either due
 to misspelling the filters, causing them to never match or because the user's
@@ -182,10 +185,9 @@ intention has changed along the way. If `swaldecay` is set to a value greater
 than zero any queued swallow is removed if it hasn't been consumed after so
 many new windows are mapped, i.e. after *swaldecay* unsuccessful matches.
 
-## 3. Implementation Details
-
-TODO:
-- Structure drawing
-- Basic implementation scheme
-- Legibility, maintainability, conciseness over performance and an extra
-  roundtrip here and there until feedback is gathered; muhhh premature optimization
+<!--
+TODO: readme: Stopping Swallows, Destruction of Swallowers
+FIX: A killed swee's swer gets restored in tiling mode
+TODO: Implement a way to remove queued swallows
+	as a cleanup: dwmswallow $WINDOWID; echo lol; dwmswallow $WINDOWID -r
+-->
