@@ -140,7 +140,7 @@ using your IPC mechanism of choice.
 
 Here's a collection of notes which may act as an aid to understanding the
 internals of the patch. Consult if you're interested in manipulating the
-patches default behavior.
+patch's default behavior.
 
 ### 3.1 Swallow Indicator in Status Bar
 
@@ -168,8 +168,8 @@ the runtime costs are completely negligible.
 An example of this is the PDF viewer zathura. Zathura's window title reflects
 the currently viewed file and may be used to queue swallows of PDF previews
 filtered by filename. However, zathura's startup sequence exhibits the above
-behavior and the window title is to the filename only after a default window
-title has been used.
+behavior and the window title is set to reflect the filename only after a
+default window title has been used.
 
 ```
 # This requires retroactive swallowing
@@ -187,6 +187,7 @@ many new windows are mapped, i.e. after *swaldecay* unsuccessful matches.
 
 <!--
 TODO: readme: Stopping Swallows, Destruction of Swallowers
+TODO: readme: Swallowing respects size hints
 FIX: A killed swee's swer gets restored in tiling mode
 TODO: Implement a way to remove queued swallows
 	as a cleanup: dwmswallow $WINDOWID; echo lol; dwmswallow $WINDOWID -r
