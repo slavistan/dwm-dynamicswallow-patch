@@ -188,7 +188,6 @@ many new windows are mapped, i.e. after *swaldecay* unsuccessful matches.
 <!--
 TODO: readme: Stopping Swallows, Destruction of Swallowers
 TODO: readme: Swallowing respects size hints
-FIX: A killed swee's swer gets restored in tiling mode
 TODO: Implement a way to remove queued swallows
 	as a cleanup: dwmswallow $WINDOWID; echo lol; dwmswallow $WINDOWID -r
 -->

@@ -670,15 +670,15 @@ index 664c527..d0fdc52 100644
 +	root->next = swer;
 +	swer->snext = root->snext;
 +	root->snext = swer;
-+	swer->isfloating = 0;
++	swer->isfloating = swee->isfloating;
 +
 +	/* Configure geometry params obtained from patches (e.g. cfacts) here. */
 +	// swer->cfact = 1.0;
 +
-+	/* Manually configure window for floating layout. */
-+	if (!root->mon->lt[root->mon->sellt]->arrange) {
++	/* If swer is not in tiling mode reuse swee's geometry. */
++	if (swer->isfloating || !root->mon->lt[root->mon->sellt]->arrange) {
 +		XRaiseWindow(dpy, swer->win);
-+		resize(swer, swee->mon->wx, swee->mon->wy, swee->w, swee->h, 0);
++		resize(swer, swee->x, swee->y, swee->w, swee->h, 0);
 +	}
 +
 +	/* Override swer's border scheme which may be using SchemeSel. */
