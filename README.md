@@ -186,6 +186,7 @@ than zero any queued swallow is removed if it hasn't been consumed after so
 many new windows are mapped, i.e. after *swaldecay* unsuccessful matches.
 
 <!--
+TODO: .diff is too confusing, unsuited for manual patching (seems to target minimum line number).
 TODO: readme: Stopping Swallows, Destruction of Swallowers
 TODO: readme: Swallowing respects size hints
 TODO: Implement a way to remove queued swallows
