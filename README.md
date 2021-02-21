@@ -3,7 +3,8 @@
 ## 1. Introduction & Usage
 
 This patch introduces "dynamic" window swallowing to dwm. In contrast to the
-mechanisms of the existing ("static") swallow patch, dynamic window swallowing is
+mechanisms of the existing ("static") [swallow
+patch](https://dwm.suckless.org/patches/swallow/), dynamic window swallowing is
 run-time configurable, command-line driven and scriptable.
 
 ### 1.1 Swallowing Future Windows
@@ -89,9 +90,9 @@ client-specific parameters that can modify a window's size or behavior. When
 applying the dynamicswallow patch these parameters must be configured manually
 in two places:
 
-+ Inside `swal()`: during the swallowing of a window the swallowee shall
+1. Inside `swal()`: during the swallowing of a window the swallowee shall
    inherit a copy of the swallower's values of these parameters.
-+ Inside `swalstop()`: when swallowing is stopped the swallower is remapped
+2. Inside `swalstop()`: when swallowing is stopped the swallower is remapped
    and the parameters' defaults for its window have to be chosen.
 
 As a representative example consider the
@@ -100,13 +101,13 @@ configure the relative sizes of windows in tiling mode using the
 client-specific parameter `cfact` of type float. The two changes necessary to
 accommodate this parameter are:
 
-+ Inside `swal()`: `cfact` shall be copied from the swallower to the swallowee.
-	/* Configure geometry params obtained from patches (e.g. cfacts) here. */
-	swee->cfact = swer->cfact;
+1. Inside `swal()`: `cfact` shall be copied from the swallower to the swallowee.
+        /* Configure geometry params obtained from patches (e.g. cfacts) here. */
+        swee->cfact = swer->cfact;
 
-+ Inside `swalstop()`: the swallower's `cfact` shall be set to a sensible default.
-	/* Configure geometry params obtained from patches (e.g. cfacts) here. */
-	swer->cfact = 1.0;
+2. Inside `swalstop()`: the swallower's `cfact` shall be set to a sensible default.
+        /* Configure geometry params obtained from patches (e.g. cfacts) here. */
+        swer->cfact = 1.0;
 
 The specific places of where to configure the parameters are marked with
 comments included in the patch.
@@ -186,6 +187,10 @@ greater than zero any registered swallow instance is deleted if it hasn't been
 consumed after so many new windows are mapped, i.e. after *swaldecay*
 unsuccessful matches.
 
-<!--
-TODO: .diff is too confusing, unsuited for manual patching (seems to target minimum line number).
--->
+## Download
+
+- [dwm-dynamicswallow-20210221-61bb8b2.diff](dwm-dynamicswallow-20210221-61bb8b2.diff)
+
+## Author
+
+- Stanislaw Hüll (st@nislaw.de)
