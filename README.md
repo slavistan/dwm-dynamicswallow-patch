@@ -1,69 +1,77 @@
 # Dynamic, Command-Line Driven Window Swallowing for dwm
 
-This patch introduces dynamic window swallowing to dwm. Any window may be
-either queued to swallow a future window based on the latter's class name,
-instance name and window title or may perform an immediate swallow of any other
-existing window. Swallowing is controlled on a per-window basis, may be stopped
-at any time and may be nested to arbitrary depth. A command-line tool is
-included to facilitate scripting.
-
 ## 1. Introduction & Usage
 
-As an introduction to window swallowing and an overview of the patch's capabilities watch this screen cast:
+This patch introduces "dynamic" window swallowing to dwm. In contrast to the
+mechanisms of the existing ("static") swallow patch, dynamic window swallowing is
+run-time configurable, command-line driven and scriptable.
 
-<p align="center">
-	<a href="https://www.youtube.com/watch?v=iB4aBY0H_oI">
-		<img border="0" alt="W3Schools" src="sausage-girl-dwm.png" width="200" height="200">
-	</a>
-	<br>
-	<a href="https://www.youtube.com/watch?v=iB4aBY0H_oI">https://www.youtube.com/watch?v=iB4aBY0H_oI</a>
-</p>
+### 1.1 Swallowing Future Windows
 
-### 1.1 Queing Swallowing of Future Windows
+Any window managed by dwm may be registered to swallow the next upcoming window
+whose attributes match the class name, instance name and window title filters
+using the command-line tool `dwmswallow`. Quoting from `dwmswallow -h`:
 
-Any window managed by dwm may be targeted to swallow any upcoming window whose
-attributes match the class name, instance name and window title filters using
-the command-line tool `dwmswallow`. Quoting from `dwmswallow --help`:
-
-```
-dwmswallow SWALLOWER [-c CLASS] [-i INSTANCE] [-t TITLE]
-  Queue window SWALLOWER to swallow the next about-to-be-mapped window whose
-  attributes match the CLASS name, INSTANCE name and window TITLE filters
-  using basic string-matching. An omitted filter will match anything.
-```
+	dwmswallow SWALLOWER [-c CLASS] [-i INSTANCE] [-t TITLE]
+	  Register window SWALLOWER to swallow the next future window whose attributes
+	  match the CLASS name, INSTANCE name and window TITLE filters using basic
+	  string-matching. An omitted filter will match anything.
 
 The next window whose filters match will be swallowed by SWALLOWER, taking its
-place. See the following example in which a terminal launches a PDF viewer and
-swallows its window, essentially creating the impression of PDF previews inside
-the terminal. Upon closing the PDF the terminal reappears. Note the symbol
-being drawn next to the layout symbol while the swallow is active.
+place. See the following example in which a terminal launches the `surf`
+browser and swallows its window, creating the impression of browsing the web
+"inside" the terminal. Upon closing the browser the terminal reappears. Note
+the symbol in the status bar next to the layout symbol while the swallow is
+active.
 
 ![](demo.gif)
 
-NOTE: This example uses the WINDOWID envvar to retrieve the terminal's window
-id. Some terminals such as `st` or `kitty` export the variable, while others
-such as `gnome-terminal` don't.
+This example uses the WINDOWID environment variable to retrieve the terminal's
+window id. Some terminals such as `st` or `kitty` export the variable, while
+others such as `gnome-terminal` don't.
 
-Swallowing is not restricted to terminals and any two windows may be involved.
-Firefox may swallow your PDF viewer which may then swallow a terminal itself,
-if you fancy that sort of thing. An uninhibited orgy, free and open-source.
+Note that swallowing is not at all restricted to terminals. Any two windows
+managed by dwm may be involved. Also, window swallowing is agnostic towards
+layouts and respects your usage of size hints.
 
-### 1.2 Swallowing of Existing Windows
+### 1.2 Swallowing Existing Windows
 
-Swallowing of existing windows may be done either from the command-line (see
-`dwmswallow --help`) or using drag-and-drop via pointer (*mod+shift+button1* by
-default).
+Swallowing of existing windows may be performed either from the command-line
+(see `dwmswallow -h`) or using drag-and-drop via pointer (*mod+shift+button1*
+by default).
 
 See the following example in which a terminal is used to launch an application
 whose stdout is considered important during its startup sequence. Once the
-startup finishes without errors the stdout is of no interest and the terminal
-window is made to swallow the application window by drag-and-dropping the
-latter onto the former.
+startup finishes without errors the stdout is of no interest anymore and the
+terminal window is made to swallow the application window by drag-and-dropping
+the latter onto the former.
 
 ![](demo2.gif)
 
 Afterwards, the terminal can be remapped at any time by stopping the swallow using
-the hotkey *mod+u*, which is not shown in the gif.
+a hotkey (*mod+u* by default), which is not shown in the example.
+
+### 1.3 Shell Integration
+
+When working in a terminal a shell alias can be used to express whether
+a graphical application shall open in a separate window or "inside" the
+terminal. Given `alias s='dwmswallow $WINDOWID;'` the command `s myguiprog`
+will run the application and swallow its window. Note that this requires the
+terminal to export the WINDOWID environment variable.
+
+Alternatively, a shell hotkey may be configured to preface the execution of
+a command with `dwmswallow $WINDOWID`. For example, the following zsh
+configuration will cause an application to be swallowed by the terminal when
+its command is submitted by pressing *CTRL-x + Enter* as opposed to pressing
+only *Enter*.
+
+	# add to .zshrc
+	bindkey '^X^m' accept-line-swallow
+	zle -N accept-line-swallow acceptandswallow
+	acceptandswallow() {
+		dwmswallow $WINDOWID
+		zle accept-line
+	}
 
 ## 2. Patching Instructions
 
@@ -77,34 +85,28 @@ better fit in with your existing build.
 When swallowing a window the swallowee copies the swallower's geometry
 parameters to reposition itself to where the swallower used to be, creating the
 impression of one window incorporating another. There exist patches which add
-client-specific parameters which can modify a window's size or behavior. When
+client-specific parameters that can modify a window's size or behavior. When
 applying the dynamicswallow patch these parameters must be configured manually
 in two places:
 
-1. Inside `swal()`: during the swallowing of a window the swallowee shall
++ Inside `swal()`: during the swallowing of a window the swallowee shall
    inherit a copy of the swallower's values of these parameters.
-2. Inside `swalstop()`: when swallowing is stopped the swallower is remapped
++ Inside `swalstop()`: when swallowing is stopped the swallower is remapped
    and the parameters' defaults for its window have to be chosen.
 
 As a representative example consider the
 [cfacts](https://dwm.suckless.org/patches/cfacts/) patch which allows to
-configure the relative sizes of the windows when in tiling mode using the
+configure the relative sizes of windows in tiling mode using the
 client-specific parameter `cfact` of type float. The two changes necessary to
 accommodate this parameter are:
 
-1. Inside `swal()`: `cfact` shall be copied from the swallower to the swallowee.
++ Inside `swal()`: `cfact` shall be copied from the swallower to the swallowee.
+	/* Configure geometry params obtained from patches (e.g. cfacts) here. */
+	swee->cfact = swer->cfact;
 
-    ```c
-    /* Configure geometry params obtained from patches (e.g. cfacts) here. */
-    swee->cfact = swer->cfact;
-    ```
-
-2. Inside `swalstop()`: the swallower's `cfact` shall be set to a sensible default.
-
-    ```c
-    /* Configure geometry params obtained from patches (e.g. cfacts) here. */
-    swer->cfact = 1.0;
-    ```
++ Inside `swalstop()`: the swallower's `cfact` shall be set to a sensible default.
+	/* Configure geometry params obtained from patches (e.g. cfacts) here. */
+	swer->cfact = 1.0;
 
 The specific places of where to configure the parameters are marked with
 comments included in the patch.
@@ -115,9 +117,8 @@ In order for `dwmswallow` to communicate with dwm some means of inter-process
 communication is required which dwm does not provide by default. To this end,
 this patch includes an adaption of the
 [fakesignal](https://dwm.suckless.org/patches/fsignal/) patch which allows
-sending commands to dwm by concatenating the command and its parameters into a
-string using a specific format and setting the name of the root window to this
-string.
+sending commands to dwm by concatenating the command and its parameters into
+a specifically formatted string and making it the name of the root window.
 
 The fakesignal patch is lightweight, non-intrusive, easy to use and easy to
 extend to other commands. If your build does not include any IPC mechanisms
@@ -125,14 +126,15 @@ there's no reason to not use fakesignal as a starting point. Its only downside
 is that the communication is unidirectional: one may send commands to dwm but
 dwm cannot send a reply in return.
 
-If your build of dwm does contain an IPC mechanism you may, of course, use the
+If your build of dwm does contain an IPC mechanism you may, of course, use your
 existing communication pathways. While there's nothing wrong with using
 fakesignal to try out the patch you will eventually want to seemlessly
-integrate everything into your existing build. To recreate the functionality of
-the vanilla version of this patch you'll have to
+integrate everything into your existing build. To achieve this you'll have to
 
 1. relay the execution of `dwmswallow SWALLOWER SWALLOWEE` to a call to `swal()`
-2. relay the execution of `dwmswallow -c CLASS -i INSTANCE -t TITLE` to a call to `swaladdpool()`.
+2. relay the execution of `dwmswallow -c CLASS -i INSTANCE -t TITLE` to a call to `swalreg()`.
+3. relay the execution of `dwmswallow -s` to a call to `swalstop()`.
+4. relay the execution of `dwmswallow -d` to a call to `swalunreg()`.
 
 using your IPC mechanism of choice.
 
@@ -151,44 +153,39 @@ symbol. If this is undesired remove the relevant commented section from
 
 ### 3.2 Retroactive Swallowing
 
-When queueing swallowing of a future window involving the window's title as a
+When registering the swallow of a future window using the window title as
 filter the swallowing may fail for some applications if retroactive swallowing
 is disabled (set by `swalretroactive`). This is due to the fact these
 applications create their window using a default window title and only update
 it later to the proper, usage-specific value. When dwm checks whether any
-queued swallows match the window's title it finds that none do due to the usage
-of the default window title when the window is mapped.
+registed swallows match the window's title it finds that none do due to the
+usage of the default window title when the window is mapped.
 
-If retroactive swallowing is enabled anytime a window changes its title dwm
-checks whether any queued swallow matches the window and executes it
+If retroactive swallowing is enabled each time a window changes its title dwm
+checks whether a registered swallow instance matches the window and executes it
 accordingly. If you find yourself wanting to filter by window title keep
 retroactive swallowing enabled. While things are small, as they usually are,
 the runtime costs are completely negligible.
 
 An example of this is the PDF viewer zathura. Zathura's window title reflects
-the currently viewed file and may be used to queue swallows of PDF previews
+the currently viewed file and may be used to register swallows of PDF previews
 filtered by filename. However, zathura's startup sequence exhibits the above
 behavior and the window title is set to reflect the filename only after a
 default window title has been used.
 
-```
-# This requires retroactive swallowing
-dwmswallow $WINDOWID -c Zathura -t ~/books/xlib.pdf
-zathura ~/books/xlib.pdf
-```
+	# This requires retroactive swallowing
+	dwmswallow $WINDOWID -c Zathura -t ~/books/xlib.pdf
+	zathura ~/books/xlib.pdf
 
-### 3.3 Decaying of Queued Swallows
+### 3.3 Decaying of Registered Swallows
 
-It occasionally happens that swallows are queued but not consumed, either due
-to misspelling the filters, causing them to never match or because the user's
-intention has changed along the way. If `swaldecay` is set to a value greater
-than zero any queued swallow is removed if it hasn't been consumed after so
-many new windows are mapped, i.e. after *swaldecay* unsuccessful matches.
+It occasionally happens that swallows are registered but not consumed, either
+due to misspelling the filters, causing them to never match or because the
+user's intention has changed along the way. If `swaldecay` is set to a value
+greater than zero any registered swallow instance is deleted if it hasn't been
+consumed after so many new windows are mapped, i.e. after *swaldecay*
+unsuccessful matches.
 
 <!--
 TODO: .diff is too confusing, unsuited for manual patching (seems to target minimum line number).
-TODO: readme: Stopping Swallows, Destruction of Swallowers
-TODO: readme: Swallowing respects size hints
-TODO: Implement a way to remove queued swallows
-	as a cleanup: dwmswallow $WINDOWID; echo lol; dwmswallow $WINDOWID -r
 -->

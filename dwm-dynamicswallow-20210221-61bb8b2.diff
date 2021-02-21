@@ -1,3 +1,18 @@
+From ac7558081ea5f576ef2ed09c1817d2722baa92fd Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Stanislaw=20H=C3=BCll?= <st@nislaw.de>
+Date: Sun, 21 Feb 2021 10:27:10 +0100
+Subject: [PATCH] dynamicswallow patch
+
+---
+ Makefile     |   3 +
+ config.def.h |   7 +
+ dwm.c        | 602 +++++++++++++++++++++++++++++++++++++++++++++++++--
+ dwmswallow   | 120 ++++++++++
+ util.c       |  30 +++
+ util.h       |   1 +
+ 6 files changed, 740 insertions(+), 23 deletions(-)
+ create mode 100755 dwmswallow
+
 diff --git a/Makefile b/Makefile
 index 77bcbc0..8bd79c8 100644
 --- a/Makefile
@@ -51,7 +66,7 @@ index 1c0b587..39e07a8 100644
  	{ ClkTagBar,            0,              Button3,        toggleview,     {0} },
  	{ ClkTagBar,            MODKEY,         Button1,        tag,            {0} },
 diff --git a/dwm.c b/dwm.c
-index 664c527..d0fdc52 100644
+index 664c527..390ef30 100644
 --- a/dwm.c
 +++ b/dwm.c
 @@ -58,7 +58,7 @@
@@ -92,16 +107,16 @@ index 664c527..d0fdc52 100644
 +	char inst[256];
 +	char title[256];
 +
-+	/* Used to remove swallow instance from pool after 'swaldecay' windows were
-+	 * mapped without the swallow having been consumed. 'decay' keeps track of
-+	 * the remaining "charges". */
++	/* Used to delete swallow instance after 'swaldecay' windows were mapped
++	 * without the swallow having been consumed. 'decay' keeps track of the
++	 * remaining "charges". */
 +	int decay;
 +
 +	/* The swallower, i.e. the client which will swallow the next mapped window
 +	 * whose filters match the above properties. */
 +	Client *client;
 +
-+	/* The swallow pool is implemented as linked list. */
++	/* Linked list of registered swallow instances. */
 +	Swallow *next;
 +};
 +
@@ -121,13 +136,13 @@ index 664c527..d0fdc52 100644
  static void sigchld(int unused);
  static void spawn(const Arg *arg);
 +static void swal(Client *swer, Client *swee, int manage);
-+static void swaladdpool(Client *c, const char* class, const char* inst, const char* title);
++static void swalreg(Client *c, const char* class, const char* inst, const char* title);
 +static void swaldecayby(int decayby);
 +static void swalmanage(Swallow *s, Window w, XWindowAttributes *wa);
 +static Swallow *swalmatch(Window w);
 +static void swalmouse(const Arg *arg);
-+static void swalrmpool(Swallow *s);
-+static void swalrmpoolbyclient(Client *c);
++static void swalrm(Swallow *s);
++static void swalunreg(Client *c);
 +static void swalstop(Client *c, Client *root);
 +static void swalstopsel(const Arg *unused);
  static void tag(const Arg *arg);
@@ -234,7 +249,7 @@ index 664c527..d0fdc52 100644
  	if ((w = m->ww - tw - x) > bh) {
  		if (m->sel) {
  			drw_setscheme(drw, scheme[m == selmon ? SchemeSel : SchemeNorm]);
-@@ -781,6 +852,59 @@ expose(XEvent *e)
+@@ -781,6 +852,81 @@ expose(XEvent *e)
  		drawbar(m);
  }
  
@@ -257,7 +272,7 @@ index 664c527..d0fdc52 100644
 +	numsegments = split(rootname + sizeof(prefix) - 1, sep, segments, sizeof(segments));
 +	numargs = numsegments - 1; /* number of arguments to COMMAND */
 +
-+	if (!strcmp(segments[0], "swaladdpool")) {
++	if (!strcmp(segments[0], "swalreg")) {
 +		/* Params: windowid, [class], [instance], [title] */
 +		Window w;
 +		Client *c;
@@ -267,7 +282,7 @@ index 664c527..d0fdc52 100644
 +			switch (wintoclient2(w, &c, NULL)) {
 +			case ClientRegular: /* fallthrough */
 +			case ClientSwallowee:
-+				swaladdpool(c, segments[2], segments[3], segments[4]);
++				swalreg(c, segments[2], segments[3], segments[4]);
 +				break;
 +			}
 +		}
@@ -288,13 +303,35 @@ index 664c527..d0fdc52 100644
 +				swal(swer, swee, 0);
 +		}
 +	}
++	else if (!strcmp(segments[0], "swalunreg")) {
++		/* Params: swallower's windowid */
++		Client *swer;
++		Window winswer;
++
++		if (numargs == 1) {
++			winswer = strtoul(segments[1], NULL, 0);
++			if ((swer = wintoclient(winswer)))
++				swalunreg(swer);
++		}
++	}
++	else if (!strcmp(segments[0], "swalstop")) {
++		/* Params: swallowee's windowid */
++		Client *swee;
++		Window winswee;
++
++		if (numargs == 1) {
++			winswee = strtoul(segments[1], NULL, 0);
++			if ((swee = wintoclient(winswee)))
++				swalstop(swee, NULL);
++		}
++	}
 +	return 1;
 +}
 +
  void
  focus(Client *c)
  {
-@@ -1090,15 +1214,37 @@ mappingnotify(XEvent *e)
+@@ -1090,15 +1236,37 @@ mappingnotify(XEvent *e)
  void
  maprequest(XEvent *e)
  {
@@ -328,13 +365,13 @@ index 664c527..d0fdc52 100644
 +		break;
 +	}
 +
-+	/* Reduce decay counter of all swallow instances in the pool. */
++	/* Reduce decay counter of all swallow instances. */
 +	if (swaldecay)
 +		swaldecayby(1);
  }
  
  void
-@@ -1214,11 +1360,13 @@ propertynotify(XEvent *e)
+@@ -1214,11 +1382,13 @@ propertynotify(XEvent *e)
  {
  	Client *c;
  	Window trans;
@@ -351,7 +388,7 @@ index 664c527..d0fdc52 100644
  		return; /* ignore */
  	else if ((c = wintoclient(ev->window))) {
  		switch(ev->atom) {
-@@ -1240,6 +1388,9 @@ propertynotify(XEvent *e)
+@@ -1240,6 +1410,9 @@ propertynotify(XEvent *e)
  			updatetitle(c);
  			if (c == c->mon->sel)
  				drawbar(c->mon);
@@ -361,7 +398,7 @@ index 664c527..d0fdc52 100644
  		}
  		if (ev->atom == netatom[NetWMWindowType])
  			updatewindowtype(c);
-@@ -1567,6 +1718,7 @@ setup(void)
+@@ -1567,6 +1740,7 @@ setup(void)
  	cursor[CurNormal] = drw_cur_create(drw, XC_left_ptr);
  	cursor[CurResize] = drw_cur_create(drw, XC_sizing);
  	cursor[CurMove] = drw_cur_create(drw, XC_fleur);
@@ -369,7 +406,7 @@ index 664c527..d0fdc52 100644
  	/* init appearance */
  	scheme = ecalloc(LENGTH(colors), sizeof(Clr *));
  	for (i = 0; i < LENGTH(colors); i++)
-@@ -1653,6 +1805,335 @@ spawn(const Arg *arg)
+@@ -1653,6 +1827,331 @@ spawn(const Arg *arg)
  	}
  }
  
@@ -384,12 +421,12 @@ index 664c527..d0fdc52 100644
 +	Client *c, **pc;
 +	int sweefocused = selmon->sel == swee;
 +
-+	/* Remove any swallows queued for the swer. Asking a swallower to swallow
-+	 * another window is ambiguous and is thus avoided altogether. In contrast,
-+	 * a swallowee can swallow in a well-defined manner by attaching to the
-+	 * head of the swallow chain. */
++	/* Remove any swallows registered for the swer. Asking a swallower to
++	 * swallow another window is ambiguous and is thus avoided altogether. In
++	 * contrast, a swallowee can swallow in a well-defined manner by attaching
++	 * to the head of the swallow chain. */
 +	if (!manage)
-+		swalrmpoolbyclient(swer);
++		swalunreg(swer);
 +
 +	/* Disable fullscreen prior to swallow. Swallows involving fullscreen
 +	 * windows produces quirky artefacts such as fullscreen terminals or tiled
@@ -440,14 +477,13 @@ index 664c527..d0fdc52 100644
 +}
 +
 +/*
-+ * Create a swallow instance targeting client 'c' and add it to the pool.
-+ * 'class', 'inst' and 'title' shall point null-terminated strings or be NULL,
-+ * implying a wildcard. If an existing swallow instance targets 'c' its filters
-+ * are updated and no new swallow instance is created. 'c' may be regular or
-+ * swallowee. Complement to swalrmpool().
++ * Register a future swallow with swallower. 'c' 'class', 'inst' and 'title'
++ * shall point null-terminated strings or be NULL, implying a wildcard. If an
++ * already existing swallow instance targets 'c' its filters are updated and no
++ * new swallow instance is created. 'c' may be ClientRegular or ClientSwallowee.
++ * Complement to swalrm().
 + */
-+void
-+swaladdpool(Client *c, const char *class, const char *inst, const char *title)
++void swalreg(Client *c, const char *class, const char *inst, const char *title)
 +{
 +	Swallow *s;
 +
@@ -490,8 +526,8 @@ index 664c527..d0fdc52 100644
 +}
 +
 +/*
-+ * Decrease decay counter of all swallows in the pool by 'decayby' and remove
-+ * any swallow instances whose counter is less than or equal to zero.
++ * Decrease decay counter of all registered swallows by 'decayby' and remove any
++ * swallow instances whose counter is less than or equal to zero.
 + */
 +void
 +swaldecayby(int decayby)
@@ -502,7 +538,7 @@ index 664c527..d0fdc52 100644
 +		s->decay -= decayby;
 +		t = s->next;
 +		if (s->decay <= 0)
-+			swalrmpool(s);
++			swalrm(s);
 +	}
 +}
 +
@@ -517,7 +553,7 @@ index 664c527..d0fdc52 100644
 +	XWindowChanges wc;
 +
 +	swer = s->client;
-+	swalrmpool(s);
++	swalrm(s);
 +
 +	/* Perform bare minimum setup of a client for window 'w' such that swal()
 +	 * may be used to perform the swallow. The following lines are basically a
@@ -543,9 +579,9 @@ index 664c527..d0fdc52 100644
 +}
 +
 +/*
-+ * Return swallow instance from pool which targets window 'w' as determined by
-+ * its class name, instance name and window title. Returns NULL if none is
-+ * found. Pendant to wintoclient().
++ * Return swallow instance which targets window 'w' as determined by its class
++ * name, instance name and window title. Returns NULL if none is found. Pendant
++ * to wintoclient().
 + */
 +Swallow *
 +swalmatch(Window w)
@@ -610,12 +646,11 @@ index 664c527..d0fdc52 100644
 +}
 +
 +/*
-+ * Remove swallow instance from pool of swallows and free its resources.
-+ * Complement to swaladdpool(). If NULL is passed all swallows are deleted from
-+ * the pool.
++ * Delete swallow instance swallows and free its resources. Complement to
++ * swalreg(). If NULL is passed all swallows are deleted from.
 + */
 +void
-+swalrmpool(Swallow *s)
++swalrm(Swallow *s)
 +{
 +	Swallow *t, **ps;
 +
@@ -634,17 +669,15 @@ index 664c527..d0fdc52 100644
 +}
 +
 +/*
-+ * If found, removes swallow instance which targets a specific client.
++ * Removes swallow instance targeting 'c' if it exists. Complement to swalreg().
 + */
-+void
-+swalrmpoolbyclient(Client *c)
-+{
-+	Swallow *s;
++void swalunreg(Client *c) { Swallow *s;
 +
 +	for (s = swallows; s; s = s->next) {
 +		if (c == s->client) {
-+			swalrmpool(s);
-+			break; /* max. 1 queued swallow per client */
++			swalrm(s);
++			/* Max. 1 registered swallow per client. No need to continue. */
++			break;
 +		}
 +	}
 +}
@@ -705,17 +738,17 @@ index 664c527..d0fdc52 100644
  void
  tag(const Arg *arg)
  {
-@@ -1768,6 +2249,9 @@ unmanage(Client *c, int destroyed)
+@@ -1768,6 +2267,9 @@ unmanage(Client *c, int destroyed)
  	Monitor *m = c->mon;
  	XWindowChanges wc;
  
 +	/* Remove all swallow instances targeting client. */
-+	swalrmpoolbyclient(c);
++	swalunreg(c);
 +
  	detach(c);
  	detachstack(c);
  	if (!destroyed) {
-@@ -1790,14 +2274,27 @@ unmanage(Client *c, int destroyed)
+@@ -1790,14 +2292,27 @@ unmanage(Client *c, int destroyed)
  void
  unmapnotify(XEvent *e)
  {
@@ -748,7 +781,7 @@ index 664c527..d0fdc52 100644
  	}
  }
  
-@@ -1839,15 +2336,19 @@ updatebarpos(Monitor *m)
+@@ -1839,15 +2354,19 @@ updatebarpos(Monitor *m)
  void
  updateclientlist()
  {
@@ -774,7 +807,7 @@ index 664c527..d0fdc52 100644
  }
  
  int
-@@ -2060,6 +2561,43 @@ wintoclient(Window w)
+@@ -2060,6 +2579,43 @@ wintoclient(Window w)
  	return NULL;
  }
  
@@ -820,66 +853,130 @@ index 664c527..d0fdc52 100644
  {
 diff --git a/dwmswallow b/dwmswallow
 new file mode 100755
-index 0000000..be23398
+index 0000000..9400606
 --- /dev/null
 +++ b/dwmswallow
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,120 @@
 +#!/usr/bin/env sh
 +
-+usage() {
-+	cat <<EOF
-+dwm window swallowing command-line interface. Usage:
-+
-+  $(printf "\033[1m")dwmswallow $(printf "\033[3m")SWALLOWER SWALLOWEE$(printf "\033[0m")
-+    Perform immediate swallow of window $(printf "\033[3m")SWALLOWEE$(printf "\033[0m") by window $(printf "\033[3m")SWALLOWER$(printf "\033[0m").
-+
-+  $(printf "\033[1m")dwmswallow $(printf "\033[3m")SWALLOWER [-c CLASS] [-i INSTANCE] [-t TITLE]$(printf "\033[0m")
-+    Queue window $(printf "\033[3m")SWALLOWER$(printf "\033[0m") to swallow the next about-to-be-mapped window whose
-+    attributes match the $(printf "\033[3m")CLASS$(printf "\033[0m") name, $(printf "\033[3m")INSTANCE$(printf "\033[0m") name and window $(printf "\033[3m")TITLE$(printf "\033[0m") filters
-+    using basic string-matching. An omitted filter will match anything.
-+
-+  $(printf "\033[1m")dwmswallow -h$(printf "\033[0m")
-+  $(printf "\033[1m")dwmswallow --help$(printf "\033[0m")
-+    Show this usage information.
-+EOF
-+}
-+
-+SEP='###' # As defined in dwm.c:fakesignal()
++# Separator and command prefix, as defined in dwm.c:fakesignal()
++SEP='###'
 +PREFIX='#!'
 +
-+if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-+	usage
-+elif [ $# -eq 2 ]; then
-+	widswer="$1"
-+	widswee="$2"
-+	if name="$(printf "${PREFIX}swal${SEP}%u${SEP}%u" "$widswer" "$widswee")"; then
-+		xsetroot -name "$name"
-+	else
-+		usage >&2
-+		exit 1
-+	fi
-+else
-+	widswer="$1"
-+	ii=2
-+	while [ $ii -le $# ]; do
-+		eval "arg=\$$ii"
-+		eval "val=\$$((ii + 1))"
-+		case "$arg" in
-+		-c) class="$val" ;;
-+		-i) instance="$val" ;;
-+		-t) title="$val" ;;
-+		*) usage >&2; exit 1 ;;
-+		esac
-+		ii=$((ii + 2))
-+	done
++# Asserts that all arguments are valid X11 window IDs, i.e. positive integers.
++# For the purpose of this script 0 is declared invalid aswe
++is_winid() {
++	while :; do
++		# Given input incompatible to %d, some implementations of printf return
++		# an error while others silently evaluate the expression to 0.
++		if ! wid=$(printf '%d' "$1" 2>/dev/null) || [ "$wid" -le 0 ]; then
++			return 1
++		fi
 +
-+	if name="$(printf "${PREFIX}swaladdpool${SEP}%u${SEP}%s${SEP}%s${SEP}%s" "$widswer" "$class" "$instance" "$title")"; then
++		[ -n "$2" ] && shift || break
++	done
++}
++
++# Prints usage help. If "$1" is provided, function exits script after
++# execution.
++usage() {
++	[ -t 1 ] && myprintf=printf || myprintf=true
++	msg="$(cat <<-EOF
++	dwm window swallowing command-line interface. Usage:
++
++	  $($myprintf "\033[1m")dwmswallow $($myprintf "\033[3m")SWALLOWER [-c CLASS] [-i INSTANCE] [-t TITLE]$($myprintf "\033[0m")
++	    Register window $($myprintf "\033[3m")SWALLOWER$($myprintf "\033[0m") to swallow the next future window whose attributes
++	    match the $($myprintf "\033[3m")CLASS$($myprintf "\033[0m") name, $($myprintf "\033[3m")INSTANCE$($myprintf "\033[0m") name and window $($myprintf "\033[3m")TITLE$($myprintf "\033[0m") filters using basic
++	    string-matching. An omitted filter will match anything.
++
++	  $($myprintf "\033[1m")dwmswallow $($myprintf "\033[3m")SWALLOWER -d$($myprintf "\033[0m")
++	    Deregister queued swallow for window $($myprintf "\033[3m")SWALLOWER$($myprintf "\033[0m"). Inverse of above signature.
++
++	  $($myprintf "\033[1m")dwmswallow $($myprintf "\033[3m")SWALLOWER SWALLOWEE$($myprintf "\033[0m")
++	    Perform immediate swallow of window $($myprintf "\033[3m")SWALLOWEE$($myprintf "\033[0m") by window $($myprintf "\033[3m")SWALLOWER$($myprintf "\033[0m").
++
++	  $($myprintf "\033[1m")dwmswallow $($myprintf "\033[3m")SWALLOWEE -s$($myprintf "\033[0m")
++	    Stop swallow of window $($myprintf "\033[3m")SWALLOWEE$($myprintf "\033[0m"). Inverse of the above signature. Visible
++	    windows only.
++
++	  $($myprintf "\033[1m")dwmswallow -h$($myprintf "\033[0m")
++	    Show this usage information.
++	EOF
++	)"
++
++	if [ -n "$1" ]; then
++		echo "$msg" >&2
++		exit "$1"
++	else
++		echo "$msg"
++	fi
++}
++
++# Determine number of leading positional arguments
++arg1="$1" # save for later
++arg2="$2" # save for later
++num_pargs=0
++while :; do
++	case "$1" in
++	-*|"") break ;;
++	*) num_pargs=$((num_pargs + 1)); shift ;;
++	esac
++done
++
++case "$num_pargs" in
++1)
++	! is_winid "$arg1" && usage 1
++
++	widswer="$arg1"
++	if [ "$1" = "-d" ] && [ "$#" -eq 1 ]; then
++		if name="$(printf "${PREFIX}swalunreg${SEP}%u" "$widswer" 2>/dev/null)"; then
++			xsetroot -name "$name"
++		else
++			usage 1
++		fi
++	elif [ "$1" = "-s" ] && [ "$#" -eq 1 ]; then
++		widswee="$arg1"
++		if name="$(printf "${PREFIX}swalstop${SEP}%u" "$widswee" 2>/dev/null)"; then
++			xsetroot -name "$name"
++		else
++			usage 1
++		fi
++	else
++		while :; do
++			case "$1" in
++			-c) [ -n "$2" ] && { class="$2"; shift 2; } || usage 1 ;;
++			-i) [ -n "$2" ] && { instance="$2"; shift 2; } || usage 1 ;;
++			-t) [ -n "$2" ] && { title="$2"; shift 2; } || usage 1 ;;
++			"") break ;;
++			*)	usage 1 ;;
++			esac
++		done
++		widswer="$arg1"
++		if name="$(printf "${PREFIX}swalreg${SEP}%u${SEP}%s${SEP}%s${SEP}%s" "$widswer" "$class" "$instance" "$title" 2>/dev/null)"; then
++			xsetroot -name "$name"
++		else
++			usage 1
++		fi
++	fi
++	;;
++2)
++	! is_winid "$arg1" "$arg2" || [ -n "$1" ] && usage 1
++
++	widswer="$arg1"
++	widswee="$arg2"
++	if name="$(printf "${PREFIX}swal${SEP}%u${SEP}%u" "$widswer" "$widswee" 2>/dev/null)"; then
 +		xsetroot -name "$name"
 +	else
-+		usage >&2
-+		exit 1
++		usage 1
 +	fi
-+fi
++	;;
++*)
++	if [ "$arg1" = "-h" ] && [ $# -eq 1 ]; then
++		usage
++	else
++		usage 1
++	fi
++esac
 diff --git a/util.c b/util.c
 index fe044fc..1f51877 100644
 --- a/util.c
