@@ -1,11 +1,16 @@
 # Dynamic, Command-Line Driven Window Swallowing for dwm
 
-## 1. Introduction & Usage
-
 This patch introduces "dynamic" window swallowing to dwm. In contrast to the
 mechanisms of the existing ("static") [swallow
 patch](https://dwm.suckless.org/patches/swallow/), dynamic window swallowing is
-run-time configurable, command-line driven and scriptable.
+run-time configurable and fully scriptable via `dwmswallow`, the command-line
+tool included with this patch.
+
+## 1. Usage
+
+Window swallowing is concerned with two scenarios: an existing window may
+either swallow another existing window, or it may be registered to swallow
+a future window.
 
 ### 1.1 Swallowing Future Windows
 
@@ -13,10 +18,10 @@ Any window managed by dwm may be registered to swallow the next upcoming window
 whose attributes match the class name, instance name and window title filters
 using the command-line tool `dwmswallow`. Quoting from `dwmswallow -h`:
 
-	dwmswallow SWALLOWER [-c CLASS] [-i INSTANCE] [-t TITLE]
-	  Register window SWALLOWER to swallow the next future window whose attributes
-	  match the CLASS name, INSTANCE name and window TITLE filters using basic
-	  string-matching. An omitted filter will match anything.
+    dwmswallow SWALLOWER [-c CLASS] [-i INSTANCE] [-t TITLE]
+      Register window SWALLOWER to swallow the next future window whose attributes
+      match the CLASS name, INSTANCE name and window TITLE filters using basic
+      string-matching. An omitted filter will match anything.
 
 The next window whose filters match will be swallowed by SWALLOWER, taking its
 place. See the following example in which a terminal launches the `surf`
@@ -66,20 +71,19 @@ configuration will cause an application to be swallowed by the terminal when
 its command is submitted by pressing *CTRL-x + Enter* as opposed to pressing
 only *Enter*.
 
-	# add to .zshrc
-	bindkey '^X^m' accept-line-swallow
-	zle -N accept-line-swallow acceptandswallow
-	acceptandswallow() {
-		dwmswallow $WINDOWID
-		zle accept-line
-	}
+    # add to .zshrc
+    bindkey '^X^m' accept-line-swallow
+    zle -N accept-line-swallow acceptandswallow
+    acceptandswallow() {
+        dwmswallow $WINDOWID
+        zle accept-line
+    }
 
 ## 2. Patching Instructions
 
-This patch is a diff against dwm's latest commit at the time of this writing
-(61bb8b2) and is meant to be self-contained. Unless you're using unmodified dwm
-the adaptions to the patch listed below may be necessary or appropriate to
-better fit in with your existing build.
+Unless your fork of dwm is only slighly modified the adaptions to the patch
+listed here may be necessary or appropriate to better fit in with your existing
+build.
 
 ### 2.1 Patch-Specific Geometry Parameters
 
@@ -134,7 +138,7 @@ existing communication pathways. While there's nothing wrong with using
 fakesignal to try out the patch you will eventually want to seemlessly
 integrate everything into your existing build. To achieve this you'll have to
 
-1. relay the execution of `dwmswallow SWALLOWER SWALLOWEE` to a call to `swal()`
+1. relay the execution of `dwmswallow SWALLOWER SWALLOWEE` to a call to `swal()`.
 2. relay the execution of `dwmswallow -c CLASS -i INSTANCE -t TITLE` to a call to `swalreg()`.
 3. relay the execution of `dwmswallow -s` to a call to `swalstop()`.
 4. relay the execution of `dwmswallow -d` to a call to `swalunreg()`.
@@ -143,9 +147,9 @@ using your IPC mechanism of choice.
 
 ## 3. Assorted Notes and Implementation Details
 
-Here's a collection of notes which may act as an aid to understanding the
-internals of the patch. Consult if you're interested in manipulating the
-patch's default behavior.
+Consult this section if you're interested in changing the default behavior or
+if you're curious about the internals of the patch. The content herein is
+presented in no particular order.
 
 ### 3.1 Swallow Indicator in Status Bar
 
@@ -176,9 +180,9 @@ filtered by filename. However, zathura's startup sequence exhibits the above
 behavior and the window title is set to reflect the filename only after a
 default window title has been used.
 
-	# This requires retroactive swallowing
-	dwmswallow $WINDOWID -c Zathura -t ~/books/xlib.pdf
-	zathura ~/books/xlib.pdf
+    # This requires retroactive swallowing
+    dwmswallow $WINDOWID -c Zathura -t ~/books/xlib.pdf
+    zathura ~/books/xlib.pdf
 
 ### 3.3 Decaying of Registered Swallows
 
