@@ -102,10 +102,12 @@ client-specific parameter `cfact` of type float. The two changes necessary to
 accommodate this parameter are:
 
 1. Inside `swal()`: `cfact` shall be copied from the swallower to the swallowee.
+
         /* Configure geometry params obtained from patches (e.g. cfacts) here. */
         swee->cfact = swer->cfact;
 
 2. Inside `swalstop()`: the swallower's `cfact` shall be set to a sensible default.
+
         /* Configure geometry params obtained from patches (e.g. cfacts) here. */
         swer->cfact = 1.0;
 
