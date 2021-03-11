@@ -6,6 +6,10 @@ patch](https://dwm.suckless.org/patches/swallow/), dynamic window swallowing is
 run-time configurable and fully scriptable via `dwmswallow`, the command-line
 tool included with this patch.
 
+## Download
+
+- [dwm-dynamicswallow-20210221-61bb8b2.diff](dwm-dynamicswallow-20210221-61bb8b2.diff)
+
 ## 1. Usage
 
 Window swallowing is concerned with two scenarios: an existing window may
@@ -38,7 +42,8 @@ others such as `gnome-terminal` don't.
 
 Note that swallowing is not at all restricted to terminals. Any two windows
 managed by dwm may be involved. Also, window swallowing is agnostic towards
-layouts and respects your usage of size hints.
+layouts, respects your usage of size hints and can be nested to arbitrary
+depths.
 
 ### 1.2 Swallowing Existing Windows
 
@@ -193,9 +198,18 @@ greater than zero any registered swallow instance is deleted if it hasn't been
 consumed after so many new windows are mapped, i.e. after *swaldecay*
 unsuccessful matches.
 
-## Download
+### 3.4 `wintoclient()` vs `wintoclient2()`
 
-- [dwm-dynamicswallow-20210221-61bb8b2.diff](dwm-dynamicswallow-20210221-61bb8b2.diff)
+Regular clients, swallowees and swallowers each require different handling by
+dwm with respect to X request and notify events (map, unmap, delete, configure,
+...) for their respective windows.
+
+In order to distinguish between the three classes of clients during runtime the
+function `wintoclient2()` extends the functionality of the built-in
+`wintoclient()`. In addition to retrieving the address of a window's client
+from the window ID, it also returns the client type. It entails a change in
+signature which is responsible for the majority of changes made by the patch
+except for self-contained function definitions.
 
 ## Author
 
