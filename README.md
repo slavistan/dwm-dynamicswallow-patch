@@ -213,4 +213,8 @@ except for self-contained function definitions.
 
 ## Author
 
-- Stanislaw Hüll (st@nislaw.de)
+- Stanislaw Hüll (hdstansen@gmail.com)
+
+<!--
+TODO: Update patch
+-->
