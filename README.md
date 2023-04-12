@@ -9,6 +9,7 @@ tool included with this patch.
 ## Download
 
 - [dwm-dynamicswallow-20210221-61bb8b2.diff](dwm-dynamicswallow-20210221-61bb8b2.diff)
+- [dwm-dynamicswallow-6.4.diff](dwm-dynamicswallow-6.4.diff)
 
 ## 1. Usage
 
@@ -214,7 +215,3 @@ except for self-contained function definitions.
 ## Author
 
 - Stanislaw Hüll (hdstansen@gmail.com)
-
-<!--
-TODO: Update patch
--->
