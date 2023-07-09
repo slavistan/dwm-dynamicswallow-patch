@@ -14,7 +14,7 @@ index 77bcbc0..8bd79c8 100644
  
  uninstall:
  	rm -f ${DESTDIR}${PREFIX}/bin/dwm\
-+		${DESTDIR}${MANPREFIX}/bin/dwmswallow\
++		${DESTDIR}${PREFIX}/bin/dwmswallow\
  		${DESTDIR}${MANPREFIX}/man1/dwm.1
  
  .PHONY: all options clean dist install uninstall
@@ -100,7 +100,7 @@ index e5efb6a..e36d6b5 100644
  
 +typedef struct Swallow Swallow;
 +struct Swallow {
-+	/* Window class name, instance name (WM_CLASS) and title
++	/* Window class name, instance name (WM_CLAS) and title
 +	 * (WM_NAME/_NET_WM_NAME, latter preferred if it exists). An empty string
 +	 * implies a wildcard as per strstr(). */
 +	char class[256];
@@ -659,7 +659,8 @@ index e5efb6a..e36d6b5 100644
 + * Removes swallow instance targeting 'c' if it exists. Complement to swalreg().
 + */
 +void
-+swalunreg(Client *c) { Swallow *s;
++swalunreg(Client *c) {
++	Swallow *s;
 +
 +	for (s = swallows; s; s = s->next) {
 +		if (c == s->client) {
